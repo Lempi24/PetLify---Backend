@@ -4,16 +4,21 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
-
+import multer from 'multer';
 import pool from './database.js';
 const app = express();
 const port = 3000;
+const upload = multer({ dest: '/uploads'})
+const cloudinary = require('./cloudinary')
+const fs = require
 
 // app.get('/', (req, res) => {
 //   res.send("test")
 // })
+
 app.use(express.json());
 app.use(cors());
+
 //Rejestracja
 app.post('/register', async (req, res) => {
 	try {
@@ -87,6 +92,50 @@ app.post('/login', async (req, res) => {
 		console.log(err);
 		res.status(500).send();
 	}
+});
+
+app.post('/reports/create-lost-form', upload.single('photo'), async (req, res) => {
+	try{
+		const user = req.user;
+		const { petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lostCoordinates, description } = req.body;
+		
+		const userLostFormsCount = await pool.query(
+			'SELECT COUNT(*) FROM  reports.lost_reports WHERE owner = $1',
+			[user.email]
+		);
+
+		if(parseInt(userLostFormsCount.rows[0].count) >= 3){
+			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
+		}
+
+		let photo_url = null;
+
+		if(req.file){
+			const result = await cloudinary.uploader.upload(req.file.path, { folder: 'lost_pets_photos'});
+			photo_url = result.secure_url;
+			fs.unlinkSync(req.file.path);
+		}
+
+		await pool.query(
+			`INSERT INTO reports.lost_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, city, street, coordinates, description, photo_url) 
+			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			[user.email, user.phone, petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lostCoordinates, description, photo_url]
+		);
+
+	} catch (err){
+		console.log(err);
+		res.status(500).send();
+	}
+});
+
+app.get('/reports/fetch-found', async (req, res) => {
+	const city = req.body;
+
+	if (!city){
+		return res.status(400).send({message: 'City is required'})
+	} 
+
+	
 });
 
 app.listen(port, () => {
