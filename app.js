@@ -94,7 +94,7 @@ app.post('/login', async (req, res) => {
 	}
 });
 
-app.post('/reports/create-lost-form', upload.single('photo'), async (req, res) => {
+app.post('/main-page/create-lost-form', upload.single('photo'), async (req, res) => {
 	try{
 		const user = req.user;
 		const { petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lostCoordinates, description } = req.body;
