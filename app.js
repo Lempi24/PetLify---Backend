@@ -8,15 +8,14 @@ import multer from 'multer';
 import pool from './database.js';
 import cloudinary from './cloudinary.js'
 import fs from 'fs'
+import authenticateToken from './tokenAuthorization.js';
 
 
 const app = express();
 const port = 3000;
 const upload = multer({ dest: './uploads'})
 
-// app.get('/', (req, res) => {
-//   res.send("test")
-// })
+
 
 app.use(express.json());
 app.use(cors());
@@ -96,10 +95,26 @@ app.post('/login', async (req, res) => {
 	}
 });
 
-app.post('/main-page/create-lost-form', upload.single('photo'), async (req, res) => {
+app.post('/main-page/create-lost-form', authenticateToken, upload.single('photo'), async (req, res) => {
 	try{
 		const user = req.user;
 		const { petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lostCoordinates, description } = req.body;
+
+		console.log('REQ.BODY:', req.body);
+		console.log('REQ.USER:', req.user);
+
+		console.log('Wysyłam dane:', {
+			petSpecies,
+			petBreed,
+			petColor,
+			petName,
+			petAge,
+			petSize,
+			lostCity,
+			lostStreet,
+			lostCoordinates,
+			description,
+		});
 		
 		const userLostFormsCount = await pool.query(
 			'SELECT COUNT(*) FROM  reports.lost_reports WHERE owner = $1',
@@ -118,10 +133,12 @@ app.post('/main-page/create-lost-form', upload.single('photo'), async (req, res)
 			fs.unlinkSync(req.file.path);
 		}
 
+		const [lat, lng] = lostCoordinates.split(',').map(Number);
+
 		await pool.query(
 			`INSERT INTO reports.lost_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, city, street, coordinates, description, photo_url) 
-			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-			[user.email, user.phone, petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lostCoordinates, description, photo_url]
+			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, POINT($11, $12), $13, $14)`,
+			[user.email, user.phone, petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lng, lat, description, photo_url]
 		);
 
 	} catch (err){
