@@ -6,11 +6,13 @@ import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import multer from 'multer';
 import pool from './database.js';
+import cloudinary from './cloudinary.js'
+import fs from 'fs'
+
+
 const app = express();
 const port = 3000;
 const upload = multer({ dest: './uploads'})
-const cloudinary = require('./cloudinary')
-const fs = require('fs');
 
 // app.get('/', (req, res) => {
 //   res.send("test")

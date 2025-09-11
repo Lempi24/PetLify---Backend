@@ -22,6 +22,7 @@
 	"homepage": "https://github.com/Lempi24/PetLify---Backend#readme",
 	"dependencies": {
 		"bcrypt": "^6.0.0",
+		"cloudinary": "^2.7.0",
 		"cors": "^2.8.5",
 		"dotenv": "^17.2.2",
 		"express": "^5.1.0",
