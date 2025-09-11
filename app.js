@@ -8,9 +8,9 @@ import multer from 'multer';
 import pool from './database.js';
 const app = express();
 const port = 3000;
-const upload = multer({ dest: '/uploads'})
+const upload = multer({ dest: './uploads'})
 const cloudinary = require('./cloudinary')
-const fs = require
+const fs = require('fs');
 
 // app.get('/', (req, res) => {
 //   res.send("test")
@@ -46,7 +46,7 @@ app.post('/register', async (req, res) => {
 			[email, hashedPassword, createdAt]
 		);
 
-		res.status(201).send();
+		res.status(200).send( { message: 'Zgłoszenie dodane' });
 	} catch (err) {
 		console.error('REGISTER ERROR:', err.message, err.code);
 		res.status(500).send();
