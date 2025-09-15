@@ -186,8 +186,18 @@ app.get('/reports/fetch-found', async (req, res) => {
 });
 
 app.get('/main-page/fetch-pets', async (req, res) => {
+	const { type } = req.query;
+
+	const tableMap = {
+		lost: 'reports.lost_reports',
+		found: 'reports.found_reports',
+	};
+	const tableName = tableMap[type];
+	if (!tableName) {
+		return res.status(400).json({ error: 'Invalid type' });
+	}
 	try {
-		const pets = await pool.query('SELECT * FROM reports.lost_reports');
+		const pets = await pool.query(`SELECT * FROM ${tableName}`);
 		res.status(200).json(pets.rows);
 	} catch (error) {
 		res.status(500).send();
