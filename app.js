@@ -6,20 +6,17 @@ import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import multer from 'multer';
 import pool from './database.js';
-import cloudinary from './cloudinary.js'
-import fs from 'fs'
+import cloudinary from './cloudinary.js';
+import fs from 'fs';
 import authenticateToken from './tokenAuthorization.js';
-
 
 const app = express();
 const port = 3000;
-const upload = multer({ dest: './uploads'})
-
-
+const upload = multer({ dest: './uploads' });
 
 app.use(express.json());
 app.use(cors());
-
+//Auth
 //Rejestracja
 app.post('/register', async (req, res) => {
 	try {
@@ -47,7 +44,7 @@ app.post('/register', async (req, res) => {
 			[email, hashedPassword, createdAt]
 		);
 
-		res.status(200).send( { message: 'Zgłoszenie dodane' });
+		res.status(200).send({ message: 'Zgłoszenie dodane' });
 	} catch (err) {
 		console.error('REGISTER ERROR:', err.message, err.code);
 		res.status(500).send();
@@ -95,66 +92,107 @@ app.post('/login', async (req, res) => {
 	}
 });
 
-app.post('/main-page/create-lost-form', authenticateToken, upload.single('photo'), async (req, res) => {
-	try{
-		const user = req.user;
-		const { petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lostCoordinates, description } = req.body;
+//main-page
+app.post(
+	'/main-page/create-lost-form',
+	authenticateToken,
+	upload.single('photo'),
+	async (req, res) => {
+		try {
+			const user = req.user;
+			const {
+				petSpecies,
+				petBreed,
+				petColor,
+				petName,
+				petAge,
+				petSize,
+				lostCity,
+				lostStreet,
+				lostCoordinates,
+				description,
+			} = req.body;
 
-		console.log('REQ.BODY:', req.body);
-		console.log('REQ.USER:', req.user);
+			console.log('REQ.BODY:', req.body);
+			console.log('REQ.USER:', req.user);
 
-		console.log('Wysyłam dane:', {
-			petSpecies,
-			petBreed,
-			petColor,
-			petName,
-			petAge,
-			petSize,
-			lostCity,
-			lostStreet,
-			lostCoordinates,
-			description,
-		});
-		
-		const userLostFormsCount = await pool.query(
-			'SELECT COUNT(*) FROM  reports.lost_reports WHERE owner = $1',
-			[user.email]
-		);
+			console.log('Wysyłam dane:', {
+				petSpecies,
+				petBreed,
+				petColor,
+				petName,
+				petAge,
+				petSize,
+				lostCity,
+				lostStreet,
+				lostCoordinates,
+				description,
+			});
 
-		if(parseInt(userLostFormsCount.rows[0].count) >= 3){
-			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
-		}
+			const userLostFormsCount = await pool.query(
+				'SELECT COUNT(*) FROM  reports.lost_reports WHERE owner = $1',
+				[user.email]
+			);
 
-		let photo_url = null;
+			if (parseInt(userLostFormsCount.rows[0].count) >= 3) {
+				return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
+			}
 
-		if(req.file){
-			const result = await cloudinary.uploader.upload(req.file.path, { folder: 'lost_pets_photos'});
-			photo_url = result.secure_url;
-			fs.unlinkSync(req.file.path);
-		}
+			let photo_url = null;
 
-		const [lat, lng] = lostCoordinates.split(',').map(Number);
+			if (req.file) {
+				const result = await cloudinary.uploader.upload(req.file.path, {
+					folder: 'lost_pets_photos',
+				});
+				photo_url = result.secure_url;
+				fs.unlinkSync(req.file.path);
+			}
 
-		await pool.query(
-			`INSERT INTO reports.lost_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, city, street, coordinates, description, photo_url) 
+			const [lat, lng] = lostCoordinates.split(',').map(Number);
+
+			await pool.query(
+				`INSERT INTO reports.lost_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, city, street, coordinates, description, photo_url) 
 			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, POINT($11, $12), $13, $14)`,
-			[user.email, user.phone, petSpecies, petBreed, petColor, petName, petAge, petSize, lostCity, lostStreet, lng, lat, description, photo_url]
-		);
-
-	} catch (err){
-		console.log(err);
-		res.status(500).send();
+				[
+					user.email,
+					user.phone,
+					petSpecies,
+					petBreed,
+					petColor,
+					petName,
+					petAge,
+					petSize,
+					lostCity,
+					lostStreet,
+					lng,
+					lat,
+					description,
+					photo_url,
+				]
+			);
+		} catch (err) {
+			console.log(err);
+			res.status(500).send();
+		}
 	}
-});
+);
 
 app.get('/reports/fetch-found', async (req, res) => {
 	const city = req.body;
 
-	if (!city){
-		return res.status(400).send({message: 'City is required'})
-	} 
+	if (!city) {
+		return res.status(400).send({ message: 'City is required' });
+	}
+});
 
-	
+app.get('/main-page/fetch-pets', async (req, res) => {
+	try {
+		const pets = await pool.query('SELECT * FROM reports.lost_reports');
+		res.status(200).json(pets.rows);
+	} catch (error) {
+		res.status(500).send();
+		console.error('FETCH PETS ERROR:', error.message, error.code);
+	}
 });
 
 app.listen(port, () => {
