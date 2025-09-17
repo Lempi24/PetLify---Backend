@@ -96,7 +96,7 @@ app.post('/login', async (req, res) => {
 app.post(
 	'/main-page/create-lost-form',
 	authenticateToken,
-	upload.single('photo'),
+	upload.array('photos', 5),
 	async (req, res) => {
 		try {
 			const user = req.user;
@@ -138,14 +138,22 @@ app.post(
 				return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
 			}
 
-			let photo_url = null;
+			let photo_urls = [];
 
-			if (req.file) {
-				const result = await cloudinary.uploader.upload(req.file.path, {
-					folder: 'lost_pets_photos',
+			if (req.files && req.files.length > 0) {
+				const uploadPromises = req.files.map((file) => {
+					return cloudinary.uploader.upload(file.path, {
+						folder: 'lost_pets_photos',
+					});
 				});
-				photo_url = result.secure_url;
-				fs.unlinkSync(req.file.path);
+
+				const results = await Promise.all(uploadPromises);
+
+				photo_urls = results.map((result) => result.secure_url);
+
+				req.files.forEach((file) => fs.unlinkSync(file.path));
+			} else {
+				return res.status(400).send('Brak wymaganego zdjęcia');
 			}
 
 			const [lat, lng] = lostCoordinates.split(',').map(Number);
@@ -167,12 +175,15 @@ app.post(
 					lng,
 					lat,
 					description,
-					photo_url,
+					photo_urls,
 				]
 			);
 		} catch (err) {
 			console.log(err);
-			res.status(500).send();
+			if (req.files) {
+				req.files.forEach((file) => fs.unlinkSync(file.path));
+			}
+			res.status(500).send('Błąd serwera');
 		}
 	}
 );
