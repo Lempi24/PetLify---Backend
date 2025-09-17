@@ -178,6 +178,8 @@ app.post(
 					photo_urls,
 				]
 			);
+
+			res.status(200).send({ message: 'Zgłoszenie dodane' });
 		} catch (err) {
 			console.log(err);
 			if (req.files) {
