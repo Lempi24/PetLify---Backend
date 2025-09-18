@@ -17,6 +17,18 @@ const upload = multer({ dest: './uploads' });
 app.use(express.json());
 app.use(cors());
 //Auth
+app.get('/auth/me', async (req, res) => {
+	try {
+		const data = await pool.query(
+			'SELECT * FROM users_data.users WHERE email = $1',
+			[req.headers.useremail]
+		);
+		res.status(200).json(data.rows[0]);
+	} catch (error) {
+		console.error('FETCH USER DATA ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
 //Rejestracja
 app.post('/register', async (req, res) => {
 	try {
@@ -88,6 +100,20 @@ app.post('/login', async (req, res) => {
 		res.status(200).json({ token });
 	} catch (err) {
 		console.log(err);
+		res.status(500).send();
+	}
+});
+//settings
+app.put('/settings/update-user-info', authenticateToken, async (req, res) => {
+	try {
+		const { email, name, surname, phoneNumber } = req.body;
+		await pool.query(
+			'UPDATE users_data.users SET first_name = $1, surname = $2, phone = $3 WHERE email = $4',
+			[name, surname, phoneNumber, email]
+		);
+		res.status(200).send({ message: 'Dane zaktualizowane' });
+	} catch (error) {
+		console.error('UPDATE USER DATA ERROR:', error.message, error.code);
 		res.status(500).send();
 	}
 });
@@ -210,7 +236,9 @@ app.get('/main-page/fetch-pets', async (req, res) => {
 		return res.status(400).json({ error: 'Invalid type' });
 	}
 	try {
-		const pets = await pool.query(`SELECT * FROM ${tableName}`);
+		const pets = await pool.query(
+			`SELECT pets.*, users.phone FROM ${tableName} AS pets, users_data.users AS users WHERE pets.owner = users.email`
+		);
 		res.status(200).json(pets.rows);
 	} catch (error) {
 		res.status(500).send();
