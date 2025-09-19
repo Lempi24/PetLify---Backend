@@ -117,7 +117,32 @@ app.put('/settings/update-user-info', authenticateToken, async (req, res) => {
 		res.status(500).send();
 	}
 });
-
+app.put('/settings/update-password', authenticateToken, async (req, res) => {
+	try {
+		const { email, currentPassword, newPassword } = req.body;
+		const userPassword = await pool.query(
+			'SELECT password FROM users_data.logins WHERE email = $1',
+			[email]
+		);
+		const passwordCheck = await bcrypt.compare(
+			currentPassword,
+			userPassword.rows[0].password
+		);
+		if (!passwordCheck) {
+			return res.status(401).send({ message: 'Błędne hasło' });
+		}
+		const salt = await bcrypt.genSalt();
+		const hashedPassword = await bcrypt.hash(newPassword, salt);
+		await pool.query(
+			'UPDATE users_data.logins SET password = $1 WHERE email = $2',
+			[hashedPassword, email]
+		);
+		res.status(200).send({ message: 'Hasło zaktualizowane' });
+	} catch (error) {
+		console.error('UPDATE USER PASSWORD ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
 //main-page
 app.post(
 	'/main-page/create-lost-form',
