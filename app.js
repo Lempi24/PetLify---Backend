@@ -158,6 +158,7 @@ app.post(
 				petName,
 				petAge,
 				petSize,
+				lostDate,
 				lostCity,
 				lostStreet,
 				lostCoordinates,
@@ -174,6 +175,7 @@ app.post(
 				petName,
 				petAge,
 				petSize,
+				lostDate,
 				lostCity,
 				lostStreet,
 				lostCoordinates,
@@ -210,8 +212,8 @@ app.post(
 			const [lat, lng] = lostCoordinates.split(',').map(Number);
 
 			await pool.query(
-				`INSERT INTO reports.lost_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, city, street, coordinates, description, photo_url) 
-			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, POINT($11, $12), $13, $14)`,
+				`INSERT INTO reports.lost_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, lost_date, city, street, coordinates, description, photo_url) 
+			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, POINT($12, $13), $14, $15)`,
 				[
 					user.email,
 					user.phone,
@@ -221,6 +223,7 @@ app.post(
 					petName,
 					petAge,
 					petSize,
+					lostDate,
 					lostCity,
 					lostStreet,
 					lng,
@@ -240,6 +243,101 @@ app.post(
 		}
 	}
 );
+
+app.post('/main-page/create-found-form', authenticateToken, upload.array('photos', 5), async (req, res) => {
+	try{
+		const user = req.user;
+		const {
+			petName,
+			petSpecies,
+			petBreed,
+			petColor,
+			petAge,
+			petSize,
+			foundDate,
+			foundCity,
+			foundStreet,
+			foundCoordinates,
+			description
+		} = req.body;
+
+		console.log('REQ.BODY:', req.body);
+		console.log('REQ.USER:', req.user);
+
+		console.log('Wysyłam dane:', {
+				petSpecies,
+				petBreed,
+				petColor,
+				petName,
+				petAge,
+				petSize,
+				foundDate,
+				foundCity,
+				foundStreet,
+				foundCoordinates,
+				description
+			});
+
+		const userFoundFormsCount = await pool.query(
+			'SELECT COUNT(*) FROM  reports.found_reports WHERE owner = $1',
+			[user.email]
+		);
+
+		if (parseInt(userFoundFormsCount.rows[0].count) >= 3) {
+			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
+		}
+		let photo_urls = [];
+
+		if (req.files && req.files.length > 0) {
+			const uploadPromises = req.files.map((file) => {
+				return cloudinary.uploader.upload(file.path, {
+					folder: 'found_pets_photos',
+				});
+			});
+
+			const results = await Promise.all(uploadPromises);
+
+			photo_urls = results.map((result) => result.secure_url);
+
+			req.files.forEach((file) => fs.unlinkSync(file.path));
+		} else {
+			return res.status(400).send('Brak wymaganego zdjęcia');
+		}
+
+		const [lat, lng] = foundCoordinates.split(',').map(Number);
+
+		await pool.query(
+			`INSERT INTO reports.found_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, found_date, city, street, coordinates, description, photo_url) 
+			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, POINT($12, $13), $14, $15)`,
+			[
+				user.email,
+				user.phone,
+				petSpecies,
+				petBreed,
+				petColor,
+				petName,
+				petAge,
+				petSize,
+				foundDate,
+				foundCity,
+				foundStreet,
+				lng,
+				lat,
+				description,
+				photo_urls,
+			]
+		);
+
+		res.status(200).send({ message: 'Zgłoszenie dodane' });
+	} catch (err) {
+		console.log(err);
+		if (req.files) {
+			req.files.forEach((file) => fs.unlinkSync(file.path));
+		}
+		res.status(500).send('Błąd serwera');
+	}
+})
+
 
 app.get('/reports/fetch-found', async (req, res) => {
 	const city = req.body;
