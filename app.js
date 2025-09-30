@@ -55,7 +55,10 @@ app.post('/register', async (req, res) => {
 			"INSERT INTO users_data.logins (email, password, created_at, verified, last_login) VALUES ($1, $2, $3, 'unverified', NULL)",
 			[email, hashedPassword, createdAt]
 		);
-
+		await pool.query(
+			'INSERT INTO users_data.settings (email, notify_new_chats, notify_missing, default_location) VALUES ($1, false, false, NULL)',
+			[email]
+		);
 		res.status(200).send({ message: 'Zgłoszenie dodane' });
 	} catch (err) {
 		console.error('REGISTER ERROR:', err.message, err.code);
@@ -114,6 +117,54 @@ app.put('/settings/update-user-info', authenticateToken, async (req, res) => {
 		res.status(200).send({ message: 'Dane zaktualizowane' });
 	} catch (error) {
 		console.error('UPDATE USER DATA ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
+app.put('/settings/notifications', authenticateToken, async (req, res) => {
+	try {
+		const { notify_new_chats, notify_missing, email } = req.body;
+		await pool.query(
+			'UPDATE users_data.settings SET notify_new_chats = $1, notify_missing = $2 WHERE email = $3',
+			[notify_new_chats, notify_missing, email]
+		);
+		res.status(200).send({ message: 'Ustawienia zaktualizowane' });
+	} catch (error) {
+		console.error(
+			'UPDATE USER NOTIFICATIONS ERROR:',
+			error.message,
+			error.code
+		);
+		res.status(500).send();
+	}
+});
+app.get(
+	'/settings/fetch-user-settings',
+	authenticateToken,
+	async (req, res) => {
+		const email = req.user.email;
+		try {
+			const settings = await pool.query(
+				'SELECT * FROM users_data.settings WHERE email = $1',
+				[email]
+			);
+			res.status(200).json(settings.rows[0]);
+		} catch (error) {
+			console.error('FETCH USER SETTINGS ERROR:', error.message, error.code);
+			res.status(500).send();
+		}
+	}
+);
+app.delete('/settings/delete-user', authenticateToken, async (req, res) => {
+	try {
+		const { email } = req.body;
+		if (!email) {
+			return res.status(400).json({ message: 'Email is required' });
+		}
+		await pool.query('DELETE FROM users_data.logins WHERE email = $1', [email]);
+		await pool.query('DELETE FROM users_data.users WHERE email = $1', [email]);
+		res.status(200).json({ message: 'Konto usunięte' });
+	} catch (error) {
+		console.error('DELETE USER ERROR:', error.message, error.code);
 		res.status(500).send();
 	}
 });
@@ -244,27 +295,31 @@ app.post(
 	}
 );
 
-app.post('/main-page/create-found-form', authenticateToken, upload.array('photos', 5), async (req, res) => {
-	try{
-		const user = req.user;
-		const {
-			petName,
-			petSpecies,
-			petBreed,
-			petColor,
-			petAge,
-			petSize,
-			foundDate,
-			foundCity,
-			foundStreet,
-			foundCoordinates,
-			description
-		} = req.body;
+app.post(
+	'/main-page/create-found-form',
+	authenticateToken,
+	upload.array('photos', 5),
+	async (req, res) => {
+		try {
+			const user = req.user;
+			const {
+				petName,
+				petSpecies,
+				petBreed,
+				petColor,
+				petAge,
+				petSize,
+				foundDate,
+				foundCity,
+				foundStreet,
+				foundCoordinates,
+				description,
+			} = req.body;
 
-		console.log('REQ.BODY:', req.body);
-		console.log('REQ.USER:', req.user);
+			console.log('REQ.BODY:', req.body);
+			console.log('REQ.USER:', req.user);
 
-		console.log('Wysyłam dane:', {
+			console.log('Wysyłam dane:', {
 				petSpecies,
 				petBreed,
 				petColor,
@@ -275,69 +330,69 @@ app.post('/main-page/create-found-form', authenticateToken, upload.array('photos
 				foundCity,
 				foundStreet,
 				foundCoordinates,
-				description
-			});
-
-		const userFoundFormsCount = await pool.query(
-			'SELECT COUNT(*) FROM  reports.found_reports WHERE owner = $1',
-			[user.email]
-		);
-
-		if (parseInt(userFoundFormsCount.rows[0].count) >= 3) {
-			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
-		}
-		let photo_urls = [];
-
-		if (req.files && req.files.length > 0) {
-			const uploadPromises = req.files.map((file) => {
-				return cloudinary.uploader.upload(file.path, {
-					folder: 'found_pets_photos',
-				});
-			});
-
-			const results = await Promise.all(uploadPromises);
-
-			photo_urls = results.map((result) => result.secure_url);
-
-			req.files.forEach((file) => fs.unlinkSync(file.path));
-		} else {
-			return res.status(400).send('Brak wymaganego zdjęcia');
-		}
-
-		const [lat, lng] = foundCoordinates.split(',').map(Number);
-
-		await pool.query(
-			`INSERT INTO reports.found_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, found_date, city, street, coordinates, description, photo_url) 
-			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, POINT($12, $13), $14, $15)`,
-			[
-				user.email,
-				user.phone,
-				petSpecies,
-				petBreed,
-				petColor,
-				petName,
-				petAge,
-				petSize,
-				foundDate,
-				foundCity,
-				foundStreet,
-				lng,
-				lat,
 				description,
-				photo_urls,
-			]
-		);
+			});
 
-		res.status(200).send({ message: 'Zgłoszenie dodane' });
-	} catch (err) {
-		console.log(err);
-		if (req.files) {
-			req.files.forEach((file) => fs.unlinkSync(file.path));
+			const userFoundFormsCount = await pool.query(
+				'SELECT COUNT(*) FROM  reports.found_reports WHERE owner = $1',
+				[user.email]
+			);
+
+			if (parseInt(userFoundFormsCount.rows[0].count) >= 3) {
+				return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
+			}
+			let photo_urls = [];
+
+			if (req.files && req.files.length > 0) {
+				const uploadPromises = req.files.map((file) => {
+					return cloudinary.uploader.upload(file.path, {
+						folder: 'found_pets_photos',
+					});
+				});
+
+				const results = await Promise.all(uploadPromises);
+
+				photo_urls = results.map((result) => result.secure_url);
+
+				req.files.forEach((file) => fs.unlinkSync(file.path));
+			} else {
+				return res.status(400).send('Brak wymaganego zdjęcia');
+			}
+
+			const [lat, lng] = foundCoordinates.split(',').map(Number);
+
+			await pool.query(
+				`INSERT INTO reports.found_reports (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, found_date, city, street, coordinates, description, photo_url) 
+			VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, POINT($12, $13), $14, $15)`,
+				[
+					user.email,
+					user.phone,
+					petSpecies,
+					petBreed,
+					petColor,
+					petName,
+					petAge,
+					petSize,
+					foundDate,
+					foundCity,
+					foundStreet,
+					lng,
+					lat,
+					description,
+					photo_urls,
+				]
+			);
+
+			res.status(200).send({ message: 'Zgłoszenie dodane' });
+		} catch (err) {
+			console.log(err);
+			if (req.files) {
+				req.files.forEach((file) => fs.unlinkSync(file.path));
+			}
+			res.status(500).send('Błąd serwera');
 		}
-		res.status(500).send('Błąd serwera');
 	}
-})
-
+);
 
 app.get('/reports/fetch-found', async (req, res) => {
 	const city = req.body;
