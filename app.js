@@ -120,6 +120,23 @@ app.put('/settings/update-user-info', authenticateToken, async (req, res) => {
 		res.status(500).send();
 	}
 });
+app.put('/settings/update-location', authenticateToken, async (req, res) => {
+	try {
+		const { email, city, country, latitude, longitude } = req.body;
+		await pool.query(
+			'UPDATE users_data.settings SET default_location = $1, default_location_lat = $2, default_location_lng = $3 WHERE email = $4',
+			[city, latitude, longitude, email]
+		);
+		await pool.query(
+			'UPDATE users_data.users SET city = $1, country = $2 WHERE email = $3',
+			[city, country, email]
+		);
+		res.status(200).send({ message: 'Lokalizacja zaktualizowana' });
+	} catch (error) {
+		console.error('UPDATE USER LOCATION ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
 app.put('/settings/notifications', authenticateToken, async (req, res) => {
 	try {
 		const { notify_new_chats, notify_missing, email } = req.body;
