@@ -75,7 +75,10 @@ app.post('/login', async (req, res) => {
 		}
 
 		const existingUser = await pool.query(
-			'SELECT email, password FROM users_data.logins WHERE email = $1',
+			`SELECT l.email, l.password, u.sys_role
+			FROM users_data.logins l
+			LEFT JOIN users_data.users u ON l.email = u.email
+			WHERE l.email = $1`,
 			[email]
 		);
 
@@ -93,7 +96,10 @@ app.post('/login', async (req, res) => {
 			[email]
 		);
 		const token = jwt.sign(
-			{ email: user.email },
+			{ 
+				email: user.email,
+				role: user.sys_role, 
+			},
 			process.env.ACCESS_SECRET_TOKEN,
 			{ expiresIn: '2h' }
 		);
