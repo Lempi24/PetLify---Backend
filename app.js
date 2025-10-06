@@ -441,6 +441,30 @@ app.get('/main-page/fetch-pets', async (req, res) => {
 	}
 });
 
+//UserReportsData
+app.get('/user-reports/fetch-reports', authenticateToken, async (req, res) => {
+	try {
+		const email = req.user.email;
+
+		const lostResult = await pool.query(
+			'SELECT * FROM reports.found_reports WHERE owner = $1',
+			[email]
+		);
+		const foundResult = await pool.query(
+			'SELECT * FROM reports.lost_reports WHERE owner = $1',
+			[email]
+		);
+
+		res.json({
+			found: foundResult.rows,
+			lost: lostResult.rows,
+		});
+	} catch (err) {
+		console.error(err);
+		res.status(500).json({ error: 'Database error' });
+	}
+});
+
 app.listen(port, () => {
 	console.log(`App listening on port ${port}`);
 });
