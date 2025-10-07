@@ -353,6 +353,7 @@ app.post('/main-page/create-found-form', authenticateToken, photoUpload.array('p
   }
 });
 
+
 // pobieranie kart
 app.get('/main-page/fetch-pets', async (req, res) => {
   const { type } = req.query;
@@ -369,6 +370,81 @@ app.get('/main-page/fetch-pets', async (req, res) => {
     res.status(500).send();
     console.error('FETCH PETS ERROR:', error.message, error.code);
   }
+
+// === PUBLIC: feed na stronę główną ===
+app.get('/main-page/fetch-pets', async (req, res) => {
+  const { type } = req.query;
+
+  // whitelist: tylko te dwie tabele mogą być użyte
+  const tableMap = {
+    lost: 'reports.lost_reports',
+    found: 'reports.found_reports',
+  };
+  const tableName = tableMap[type];
+  if (!tableName) return res.status(400).json({ error: 'Invalid type' });
+
+  try {
+    const sql = `
+      SELECT 
+        p.id,
+        p.title,
+        p.description,
+        p.animal,
+        p.breed,
+        p.color,
+        p.city,
+        p.date,
+        p.owner,
+        u.phone
+      FROM ${tableName} AS p
+      LEFT JOIN users_data.users AS u
+        ON p.owner = u.email
+      ORDER BY p.date DESC
+      LIMIT 100
+    `;
+    const { rows } = await pool.query(sql);
+    return res.status(200).json(rows);
+  } catch (error) {
+    console.error('FETCH PETS ERROR:', error.message, error.code);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+
+// === PRIVATE: raporty zalogowanego użytkownika ===
+app.get('/user-reports/fetch-reports', authenticateToken, async (req, res) => {
+  try {
+    const email = req.user?.email;
+    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+
+    const lostSql  = `
+      SELECT id, title, description, animal, breed, color, city, date, owner
+      FROM reports.lost_reports
+      WHERE owner = $1
+      ORDER BY date DESC
+    `;
+    const foundSql = `
+      SELECT id, title, description, animal, breed, color, city, date, owner
+      FROM reports.found_reports
+      WHERE owner = $1
+      ORDER BY date DESC
+    `;
+
+    const [lostResult, foundResult] = await Promise.all([
+      pool.query(lostSql,  [email]),
+      pool.query(foundSql, [email]),
+    ]);
+
+    return res.json({
+      lost:  lostResult.rows,
+      found: foundResult.rows,
+    });
+  } catch (err) {
+    console.error('USER REPORTS ERROR:', err.message);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
 });
 
 // ====== ROUTES: CHATS (NOWE) ======
