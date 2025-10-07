@@ -104,7 +104,7 @@ io.on('connection', (socket) => {
 // --- Multer do uploadów w formularzach (bez czatów) ---
 const upload = multer({ dest: './uploads' });
 
-// ====== DOTYCHCZASOWE ENDPOINTY (twoje, bez zmian istotnych) ======
+// ====== DOTYCHCZASOWE ENDPOINTY ======
 app.get('/auth/me', async (req, res) => {
   try {
     const data = await pool.query(
@@ -177,7 +177,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// ====== SETTINGS (jak było) ======
+// ====== SETTINGS ======
 app.put('/settings/update-user-info', authenticateToken, async (req, res) => {
   try {
     const { email, name, surname, phoneNumber } = req.body;
@@ -268,7 +268,7 @@ app.put('/settings/update-password', authenticateToken, async (req, res) => {
   }
 });
 
-// ====== FORMULARZE (jak było) ======
+// ====== FORMULARZE ======
 const photoUpload = multer({ dest: './uploads' });
 
 app.post('/main-page/create-lost-form', authenticateToken, photoUpload.array('photos', 5), async (req, res) => {
@@ -353,53 +353,26 @@ app.post('/main-page/create-found-form', authenticateToken, photoUpload.array('p
   }
 });
 
-
-// pobieranie kart
+// ====== PUBLIC: feed na stronę główną ======
 app.get('/main-page/fetch-pets', async (req, res) => {
   const { type } = req.query;
+
   const tableMap = { lost: 'reports.lost_reports', found: 'reports.found_reports' };
   const tableName = tableMap[type];
   if (!tableName) return res.status(400).json({ error: 'Invalid type' });
 
-  try {
-    const pets = await pool.query(
-      `SELECT pets.*, users.phone FROM ${tableName} AS pets, users_data.users AS users WHERE pets.owner = users.email`
-    );
-    res.status(200).json(pets.rows);
-  } catch (error) {
-    res.status(500).send();
-    console.error('FETCH PETS ERROR:', error.message, error.code);
-  }
-
-// === PUBLIC: feed na stronę główną ===
-app.get('/main-page/fetch-pets', async (req, res) => {
-  const { type } = req.query;
-
-  // whitelist: tylko te dwie tabele mogą być użyte
-  const tableMap = {
-    lost: 'reports.lost_reports',
-    found: 'reports.found_reports',
-  };
-  const tableName = tableMap[type];
-  if (!tableName) return res.status(400).json({ error: 'Invalid type' });
+  // kolumna daty zależna od typu
+  const dateCol = type === 'lost' ? 'lost_date' : 'found_date';
 
   try {
     const sql = `
       SELECT 
-        p.id,
-        p.title,
-        p.description,
-        p.animal,
-        p.breed,
-        p.color,
-        p.city,
-        p.date,
-        p.owner,
-        u.phone
+        p.*,        -- wszystkie kolumny z raportu
+        u.phone     -- telefon z tabeli users
       FROM ${tableName} AS p
       LEFT JOIN users_data.users AS u
         ON p.owner = u.email
-      ORDER BY p.date DESC
+      ORDER BY p.${dateCol} DESC
       LIMIT 100
     `;
     const { rows } = await pool.query(sql);
@@ -410,24 +383,25 @@ app.get('/main-page/fetch-pets', async (req, res) => {
   }
 });
 
-
-// === PRIVATE: raporty zalogowanego użytkownika ===
+// ====== PRIVATE: raporty zalogowanego użytkownika ======
 app.get('/user-reports/fetch-reports', authenticateToken, async (req, res) => {
   try {
     const email = req.user?.email;
     if (!email) return res.status(401).json({ error: 'Unauthorized' });
 
     const lostSql  = `
-      SELECT id, title, description, animal, breed, color, city, date, owner
+      SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
+             lost_date, city, street, owner, photo_url, description, phone
       FROM reports.lost_reports
       WHERE owner = $1
-      ORDER BY date DESC
+      ORDER BY lost_date DESC
     `;
     const foundSql = `
-      SELECT id, title, description, animal, breed, color, city, date, owner
+      SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
+             found_date, city, street, owner, photo_url, description, phone
       FROM reports.found_reports
       WHERE owner = $1
-      ORDER BY date DESC
+      ORDER BY found_date DESC
     `;
 
     const [lostResult, foundResult] = await Promise.all([
@@ -443,8 +417,6 @@ app.get('/user-reports/fetch-reports', authenticateToken, async (req, res) => {
     console.error('USER REPORTS ERROR:', err.message);
     return res.status(500).json({ error: 'Database error' });
   }
-});
-
 });
 
 // ====== ROUTES: CHATS (NOWE) ======
