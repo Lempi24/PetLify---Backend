@@ -106,6 +106,7 @@ app.post('/login', async (req, res) => {
 		res.status(500).send();
 	}
 });
+
 //settings
 app.put('/settings/update-user-info', authenticateToken, async (req, res) => {
 	try {
@@ -351,7 +352,7 @@ app.get('/reports/fetch-found', async (req, res) => {
 });
 
 app.get('/main-page/fetch-pets', async (req, res) => {
-	const { type } = req.query;
+	const { type, status } = req.query;
 
 	const tableMap = {
 		lost: 'reports.lost_reports',
@@ -363,13 +364,121 @@ app.get('/main-page/fetch-pets', async (req, res) => {
 	}
 	try {
 		const pets = await pool.query(
-			`SELECT pets.*, users.phone FROM ${tableName} AS pets, users_data.users AS users WHERE pets.owner = users.email`
+			`SELECT pets.*, users.phone, pets.id
+			 FROM ${tableName} AS pets, users_data.users AS users 
+			 WHERE pets.owner = users.email AND pets.status = $1`,
+			[status]
 		);
 		res.status(200).json(pets.rows);
 	} catch (error) {
 		res.status(500).send();
 		console.error('FETCH PETS ERROR:', error.message, error.code);
 	}
+});
+
+app.post('/admin-panel/approve-report', authenticateToken, async (req, res) => {
+	if (req.user.role !== 'admin') {
+		return res.status(403).send();
+	}
+
+	const { reportId, reportType } = req.body;
+
+	if (!reportId) {
+		return res.status(400).send({ message: 'Report ID is required' });
+	}
+
+	try {
+		if (reportType === 'lost') {
+			await pool.query(
+				`UPDATE reports.lost_reports SET status = 'active' WHERE id = $1`,
+				[reportId]
+			);
+		} else if (reportType === 'found') {
+			await pool.query(
+				`UPDATE reports.found_reports SET status = 'active' WHERE id = $1`,
+				[reportId]
+			);
+		}
+		res.status(200).send({ message: 'Report is active!' });
+	} catch (error) {
+		console.error('APPROVE REPORT ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
+
+app.post('/admin-panel/reject-report', authenticateToken, async (req, res) => {
+	if (req.user.sys_role !== 'admin') {
+		return res.status(403).send();
+	}
+
+	const { reportId, reportType } = req.body;
+
+	if (!reportId) {
+		return res.status(400).send({ message: 'Report ID is required' });
+	}
+
+	try {
+		if (reportType === 'lost') {
+			await pool.query(
+				`UPDATE reports.lost_reports SET status = 'closed' WHERE id = $1`,
+				[reportId]
+			);
+		} else if (reportType === 'found') {
+			await pool.query(
+				`UPDATE reports.found_reports SET status = 'closed' WHERE id = $1`,
+				[reportId]
+			);
+		}
+		res.status(200).send({ message: 'Report rejected' });
+	} catch (error) {
+		console.error('REJECT REPORT ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
+
+app.post('/admin-panel/manage-permissions', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Brak uprawnień administratora' });
+    }
+
+    console.log(' Token payload:', req.user);
+    console.log(' Body:', req.body);
+
+	let userEmailCheck;
+	try {
+		userEmailCheck = await pool.query(
+			'SELECT email FROM users_data.users WHERE email = $1',
+			[req.body.userEmail]
+		);
+	} catch (error) {
+		console.error('USER EMAIL CHECK ERROR:', error);
+		return res.status(500).json({ message: 'Błąd serwera podczas sprawdzania emaila' });
+	}
+
+	if (userEmailCheck.rows.length === 0) {
+		return res.status(404).json({ message: 'Użytkownik o podanym emailu nie istnieje' });
+	}
+
+    try {
+        const { userEmail, newRole } = req.body;
+
+        if (!userEmail || !newRole) {
+            return res.status(400).json({ message: 'Email i rola są wymagane' });
+        }
+
+        const result = await pool.query(
+			'UPDATE users_data.users SET sys_role = $1 WHERE email = $2',
+			[newRole, userEmail]
+		);
+
+        res.status(200).json({
+            message: `Pomyślnie zaktualizowano uprawnienia dla ${userEmail} na rolę: ${newRole}`
+        });
+
+    } catch (error) {
+        console.error('UPDATE PERMISSIONS ERROR:', error);
+        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji uprawnień' });
+    }
 });
 
 app.listen(port, () => {
