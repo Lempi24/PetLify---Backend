@@ -425,11 +425,12 @@ app.get('/main-page/fetch-pets', async (req, res) => {
   
 	try {
 		const pets = await pool.query(
-			`SELECT pets.*, users.phone, pets.id
-			 FROM ${tableName} AS pets, users_data.users AS users 
-			 WHERE pets.owner = users.email AND pets.status = ${status}
-       ORDER BY p.${dateCol} DESC`,
-		);
+      `SELECT pets.*, users.phone, pets.id
+       FROM ${tableName} AS pets, users_data.users AS users 
+       WHERE pets.owner = users.email AND pets.status = $1
+       ORDER BY pets.${dateCol} DESC`,
+      [status]
+    );
 		res.status(200).json(pets.rows);
 	} catch (error) {
 		console.error('FETCH PETS ERROR:', error.message, error.code);
