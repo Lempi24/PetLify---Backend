@@ -407,7 +407,7 @@ app.post('/admin-panel/approve-report', authenticateToken, async (req, res) => {
 });
 
 app.post('/admin-panel/reject-report', authenticateToken, async (req, res) => {
-	if (req.user.sys_role !== 'admin') {
+	if (req.user.role !== 'admin') {
 		return res.status(403).send();
 	}
 
