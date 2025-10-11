@@ -151,33 +151,49 @@ app.post('/register', async (req, res) => {
 
 // Logowanie
 app.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).send({ message: 'Email and password are required.' });
+	try {
+		const { email, password } = req.body;
 
-    const existingUser = await pool.query(
-      'SELECT email, password FROM users_data.logins WHERE email = $1',
-      [email]
-    );
-    if (existingUser.rows.length == 0) return res.status(401).send();
+		if (!email || !password) {
+			return res
+				.status(400)
+				.send({ message: 'Email and password are required.' });
+		}
 
-    const user = existingUser.rows[0];
-    const passwordCheck = await bcrypt.compare(password, user.password);
-    if (!passwordCheck) return res.status(401).send();
+		const existingUser = await pool.query(
+			`SELECT l.email, l.password, u.sys_role
+			FROM users_data.logins l
+			LEFT JOIN users_data.users u ON l.email = u.email
+			WHERE l.email = $1`,
+			[email]
+		);
 
-    await pool.query(
-      'UPDATE users_data.logins SET last_login = NOW() WHERE email = $1',
-      [email]
-    );
-    const token = jwt.sign({ email: user.email }, process.env.ACCESS_SECRET_TOKEN, { expiresIn: '2h' });
-    res.status(200).json({ token });
-  } catch (err) {
-    console.log(err);
-    res.status(500).send();
-  }
+		if (existingUser.rows.length == 0) {
+			return res.status(401).send();
+		}
+		const user = existingUser.rows[0];
+
+		const passwordCheck = await bcrypt.compare(password, user.password);
+		if (!passwordCheck) {
+			return res.status(401).send();
+		}
+		await pool.query(
+			'UPDATE users_data.logins SET last_login = NOW() WHERE email = $1',
+			[email]
+		);
+		const token = jwt.sign(
+			{ email: user.email, role: user.sys_role },
+			process.env.ACCESS_SECRET_TOKEN,
+			{ expiresIn: '2h' }
+		);
+		res.status(200).json({ token });
+	} catch (err) {
+		console.log(err);
+		res.status(500).send();
+	}
 });
 
-// ====== SETTINGS ======
+//settings
 app.put('/settings/update-user-info', authenticateToken, async (req, res) => {
   try {
     const { email, name, surname, phoneNumber } = req.body;
@@ -353,36 +369,6 @@ app.post('/main-page/create-found-form', authenticateToken, photoUpload.array('p
   }
 });
 
-// ====== PUBLIC: feed na stronę główną ======
-app.get('/main-page/fetch-pets', async (req, res) => {
-  const { type } = req.query;
-
-  const tableMap = { lost: 'reports.lost_reports', found: 'reports.found_reports' };
-  const tableName = tableMap[type];
-  if (!tableName) return res.status(400).json({ error: 'Invalid type' });
-
-  // kolumna daty zależna od typu
-  const dateCol = type === 'lost' ? 'lost_date' : 'found_date';
-
-  try {
-    const sql = `
-      SELECT 
-        p.*,        -- wszystkie kolumny z raportu
-        u.phone     -- telefon z tabeli users
-      FROM ${tableName} AS p
-      LEFT JOIN users_data.users AS u
-        ON p.owner = u.email
-      ORDER BY p.${dateCol} DESC
-      LIMIT 100
-    `;
-    const { rows } = await pool.query(sql);
-    return res.status(200).json(rows);
-  } catch (error) {
-    console.error('FETCH PETS ERROR:', error.message, error.code);
-    return res.status(500).json({ error: 'Database error' });
-  }
-});
-
 // ====== PRIVATE: raporty zalogowanego użytkownika ======
 app.get('/user-reports/fetch-reports', authenticateToken, async (req, res) => {
   try {
@@ -417,6 +403,143 @@ app.get('/user-reports/fetch-reports', authenticateToken, async (req, res) => {
     console.error('USER REPORTS ERROR:', err.message);
     return res.status(500).json({ error: 'Database error' });
   }
+
+// ====== PUBLIC: feed na stronę główną ======
+app.get('/main-page/fetch-pets', async (req, res) => {
+
+	const { type, status } = req.query;
+
+	const tableMap = {
+		lost: 'reports.lost_reports',
+		found: 'reports.found_reports',
+	};
+  
+	const tableName = tableMap[type];
+  
+	if (!tableName) {
+		return res.status(400).json({ error: 'Invalid type' });
+	}
+  
+  const dateCol = type === 'lost' ? 'lost_date' : 'found_date';
+  
+	try {
+		const pets = await pool.query(
+			`SELECT pets.*, users.phone, pets.id
+			 FROM ${tableName} AS pets, users_data.users AS users 
+			 WHERE pets.owner = users.email AND pets.status = ${status}
+       ORDER BY p.${dateCol} DESC`,
+		);
+		res.status(200).json(pets.rows);
+	} catch (error) {
+		console.error('FETCH PETS ERROR:', error.message, error.code);
+    return res.status(500).json({ error: 'Database error' });
+  }
+  
+});
+
+app.post('/admin-panel/approve-report', authenticateToken, async (req, res) => {
+	if (req.user.role !== 'admin') {
+		return res.status(403).send();
+	}
+
+	const { reportId, reportType } = req.body;
+
+	if (!reportId) {
+		return res.status(400).send({ message: 'Report ID is required' });
+	}
+
+	try {
+		if (reportType === 'lost') {
+			await pool.query(
+				`UPDATE reports.lost_reports SET status = 'active' WHERE id = $1`,
+				[reportId]
+			);
+		} else if (reportType === 'found') {
+			await pool.query(
+				`UPDATE reports.found_reports SET status = 'active' WHERE id = $1`,
+				[reportId]
+			);
+		}
+		res.status(200).send({ message: 'Report is active!' });
+	} catch (error) {
+		console.error('APPROVE REPORT ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
+
+app.post('/admin-panel/reject-report', authenticateToken, async (req, res) => {
+	if (req.user.role !== 'admin') {
+		return res.status(403).send();
+	}
+
+	const { reportId, reportType } = req.body;
+
+	if (!reportId) {
+		return res.status(400).send({ message: 'Report ID is required' });
+	}
+
+	try {
+		if (reportType === 'lost') {
+			await pool.query(
+				`UPDATE reports.lost_reports SET status = 'closed' WHERE id = $1`,
+				[reportId]
+			);
+		} else if (reportType === 'found') {
+			await pool.query(
+				`UPDATE reports.found_reports SET status = 'closed' WHERE id = $1`,
+				[reportId]
+			);
+		}
+		res.status(200).send({ message: 'Report rejected' });
+	} catch (error) {
+		console.error('REJECT REPORT ERROR:', error.message, error.code);
+		res.status(500).send();
+	}
+});
+
+app.post('/admin-panel/manage-permissions', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Brak uprawnień administratora' });
+    }
+
+    console.log(' Token payload:', req.user);
+    console.log(' Body:', req.body);
+
+	let userEmailCheck;
+	try {
+		userEmailCheck = await pool.query(
+			'SELECT email FROM users_data.users WHERE email = $1',
+			[req.body.userEmail]
+		);
+	} catch (error) {
+		console.error('USER EMAIL CHECK ERROR:', error);
+		return res.status(500).json({ message: 'Błąd serwera podczas sprawdzania emaila' });
+	}
+
+	if (userEmailCheck.rows.length === 0) {
+		return res.status(404).json({ message: 'Użytkownik o podanym emailu nie istnieje' });
+	}
+
+    try {
+        const { userEmail, newRole } = req.body;
+
+        if (!userEmail || !newRole) {
+            return res.status(400).json({ message: 'Email i rola są wymagane' });
+        }
+
+        const result = await pool.query(
+			'UPDATE users_data.users SET sys_role = $1 WHERE email = $2',
+			[newRole, userEmail]
+		);
+
+        res.status(200).json({
+            message: `Pomyślnie zaktualizowano uprawnienia dla ${userEmail} na rolę: ${newRole}`
+        });
+
+    } catch (error) {
+        console.error('UPDATE PERMISSIONS ERROR:', error);
+        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji uprawnień' });
+    }
 });
 
 // ====== ROUTES: CHATS (NOWE) ======
