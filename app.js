@@ -403,6 +403,7 @@ app.get('/user-reports/fetch-reports', authenticateToken, async (req, res) => {
     console.error('USER REPORTS ERROR:', err.message);
     return res.status(500).json({ error: 'Database error' });
   }
+});
 
 // ====== PUBLIC: feed na stronę główną ======
 app.get('/main-page/fetch-pets', async (req, res) => {
