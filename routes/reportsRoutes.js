@@ -5,6 +5,7 @@ import {
 	createLostForm,
 	createFoundForm,
 	fetchUserReports,
+	editReport,
 } from '../controllers/reportsController.js';
 
 const router = express.Router();
@@ -28,5 +29,6 @@ router.post(
 
 // User reports
 router.get('/fetch-reports', authenticateToken, fetchUserReports);
-
+//Edit report
+router.put('/edit-report', authenticateToken, editReport);
 export default router;
