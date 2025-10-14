@@ -155,16 +155,14 @@ export const fetchUserReports = async (req, res) => {
 		if (!email) return res.status(401).json({ error: 'Unauthorized' });
 
 		const lostSql = `
-      SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
-             lost_date, city, street, owner, photo_url, description, phone
+      SELECT *
       FROM reports.lost_reports
       WHERE owner = $1
       ORDER BY lost_date DESC
     `;
 
 		const foundSql = `
-      SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
-             found_date, city, street, owner, photo_url, description, phone
+      SELECT *
       FROM reports.found_reports
       WHERE owner = $1
       ORDER BY found_date DESC
@@ -182,5 +180,70 @@ export const fetchUserReports = async (req, res) => {
 	} catch (err) {
 		console.error('USER REPORTS FETCH ERROR:', err.message);
 		res.status(500).json({ error: 'Database error' });
+	}
+};
+
+//Edit user report
+export const editReport = async (req, res) => {
+	try {
+		const {
+			id,
+			pet_name,
+			pet_species,
+			pet_breed,
+			pet_age,
+			description,
+			street,
+			city,
+			photo_url,
+			type,
+		} = req.body;
+		const owner = req.user.email;
+
+		if (!['lost', 'found'].includes(type)) {
+			return res.status(400).json({ message: 'Nieprawidłowy typ zgłoszenia.' });
+		}
+
+		// dynamiczne wybranie tabeli (widoku)
+		const tableName =
+			type === 'lost' ? 'reports.lost_reports' : 'reports.found_reports';
+
+		const query = `
+			UPDATE ${tableName}
+			SET pet_name = $1,
+				pet_species = $2,
+				pet_breed = $3,
+				pet_age = $4,
+				description = $5,
+				street = $6,
+				city = $7,
+				photo_url = $8
+			WHERE id = $9 AND owner = $10
+			RETURNING *;
+		`;
+
+		const result = await pool.query(query, [
+			pet_name,
+			pet_species,
+			pet_breed,
+			pet_age,
+			description,
+			street,
+			city,
+			photo_url,
+			id,
+			owner,
+		]);
+
+		if (result.rowCount === 0) {
+			return res
+				.status(404)
+				.json({ message: 'Nie znaleziono zgłoszenia lub brak uprawnień.' });
+		}
+
+		res.json(result.rows[0]);
+	} catch (error) {
+		console.error('Błąd edycji raportu:', error);
+		res.status(500).json({ message: 'Błąd serwera.' });
 	}
 };
