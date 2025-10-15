@@ -7,7 +7,7 @@ import pool from '../database.js';
 export default function chatRouterFactory(io) {
   const router = Router();
 
-  // Tworzenie schematu/tabel przy starcie (idempotentne)
+  // Idempotentny bootstrap schematu/tabel
   const ensureSchema = async () => {
     await pool.query(`CREATE SCHEMA IF NOT EXISTS chats;`);
 
@@ -20,7 +20,9 @@ export default function chatRouterFactory(io) {
         partner_email TEXT NOT NULL,
         last_message TEXT NULL,
         last_time TIMESTAMPTZ NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_for_owner BOOLEAN NOT NULL DEFAULT false,
+        deleted_for_partner BOOLEAN NOT NULL DEFAULT false
       );
     `);
 
@@ -35,7 +37,28 @@ export default function chatRouterFactory(io) {
       );
     `);
 
-    // Ten indeks zapewnia unikalność pary (pet + uporządkowane maile)
+    // Dodanie kolumn jeśli jeszcze ich nie ma (bezpiecznie przy aktualizacji)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='chats' AND table_name='threads' AND column_name='deleted_for_owner'
+        ) THEN
+          ALTER TABLE chats.threads ADD COLUMN deleted_for_owner BOOLEAN NOT NULL DEFAULT false;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='chats' AND table_name='threads' AND column_name='deleted_for_partner'
+        ) THEN
+          ALTER TABLE chats.threads ADD COLUMN deleted_for_partner BOOLEAN NOT NULL DEFAULT false;
+        END IF;
+      END
+      $$;
+    `);
+
+    // Unikalność (pet + uporządkowane maile)
     await pool.query(`
       DO $$
       BEGIN
@@ -62,10 +85,10 @@ export default function chatRouterFactory(io) {
   // body: { subject, petId, ownerEmail, partnerEmail }
   router.post('/ensure-thread', authenticateToken, async (req, res) => {
     try {
+      const me = req.user.email.toLowerCase();
       const { subject = 'Zwierzak', petId = null, ownerEmail, partnerEmail } = req.body;
       if (!ownerEmail || !partnerEmail) return res.status(400).json({ message: 'Missing emails' });
 
-      // porządek pary (a..b)
       const a = ownerEmail.trim().toLowerCase();
       const b = partnerEmail.trim().toLowerCase();
       const owner = a < b ? a : b;
@@ -82,7 +105,25 @@ export default function chatRouterFactory(io) {
         [petId, owner, partner]
       );
 
-      if (rows[0]) return res.json(rows[0]);
+      if (rows[0]) {
+        // Jeżeli wątek istnieje a był "ukryty" dla proszącego, to go "odkryj"
+        const t = rows[0];
+        if (me === t.owner_email && t.deleted_for_owner) {
+          const { rows: upd } = await pool.query(
+            `UPDATE chats.threads SET deleted_for_owner = false WHERE id = $1 RETURNING *`,
+            [t.id]
+          );
+          return res.json(upd[0]);
+        }
+        if (me === t.partner_email && t.deleted_for_partner) {
+          const { rows: upd } = await pool.query(
+            `UPDATE chats.threads SET deleted_for_partner = false WHERE id = $1 RETURNING *`,
+            [t.id]
+          );
+          return res.json(upd[0]);
+        }
+        return res.json(t);
+      }
 
       const id = uuidv4();
       const created = await pool.query(
@@ -100,14 +141,15 @@ export default function chatRouterFactory(io) {
     }
   });
 
-  // [GET] /chats/threads  -> lista wątków użytkownika
+  // [GET] /chats/threads  -> lista wątków użytkownika (bez tych "ukrytych" dla niego)
   router.get('/threads', authenticateToken, async (req, res) => {
     try {
       const me = req.user.email.toLowerCase();
       const { rows } = await pool.query(
         `
         SELECT * FROM chats.threads
-        WHERE owner_email = $1 OR partner_email = $1
+        WHERE (owner_email = $1 AND deleted_for_owner = false)
+           OR (partner_email = $1 AND deleted_for_partner = false)
         ORDER BY COALESCE(last_time, created_at) DESC
         `,
         [me]
@@ -123,16 +165,20 @@ export default function chatRouterFactory(io) {
   router.get('/:threadId/messages', authenticateToken, async (req, res) => {
     try {
       const { threadId } = req.params;
-
-      // kontrola dostępu — tylko uczestnik
       const me = req.user.email.toLowerCase();
+
       const { rows: trows } = await pool.query(
-        `SELECT owner_email, partner_email FROM chats.threads WHERE id = $1`,
+        `SELECT owner_email, partner_email, deleted_for_owner, deleted_for_partner
+         FROM chats.threads WHERE id = $1`,
         [threadId]
       );
       const t = trows[0];
       if (!t) return res.status(404).send();
       if (t.owner_email !== me && t.partner_email !== me) return res.status(403).send();
+
+      // jeżeli ktoś "ukrył" u siebie – traktujemy jak brak dostępu z listy;
+      // ale jeśli dojdzie tutaj, pozwalamy (np. po odświeżeniu) – można też zablokować:
+      // if ((me === t.owner_email && t.deleted_for_owner) || (me === t.partner_email && t.deleted_for_partner)) return res.status(404).send();
 
       const { rows } = await pool.query(
         `
@@ -149,13 +195,12 @@ export default function chatRouterFactory(io) {
     }
   });
 
-  // [POST] /chats/:threadId/message  (HTTP fallback / początkowe wysłanie)
+  // [POST] /chats/:threadId/message
   router.post('/:threadId/message', authenticateToken, async (req, res) => {
     try {
       const { threadId } = req.params;
       const { text = '', attachments = [] } = req.body;
 
-      // kontrola dostępu — tylko uczestnik
       const me = req.user.email.toLowerCase();
       const { rows: trows } = await pool.query(
         `SELECT id, owner_email, partner_email FROM chats.threads WHERE id = $1`,
@@ -194,7 +239,6 @@ export default function chatRouterFactory(io) {
       };
 
       io.to(`thread:${threadId}`).emit('chat:newMessage', payload);
-
       res.json(payload);
     } catch (e) {
       console.error('post message error:', e);
@@ -202,14 +246,15 @@ export default function chatRouterFactory(io) {
     }
   });
 
-  // [DELETE] /chats/:threadId  -> usuń cały wątek (tylko uczestnik)
+  // [DELETE] /chats/:threadId  -> "usuń dla mnie"
   router.delete('/:threadId', authenticateToken, async (req, res) => {
     try {
       const { threadId } = req.params;
       const me = req.user.email.toLowerCase();
 
       const { rows: trows } = await pool.query(
-        `SELECT id, owner_email, partner_email FROM chats.threads WHERE id = $1`,
+        `SELECT id, owner_email, partner_email, deleted_for_owner, deleted_for_partner
+         FROM chats.threads WHERE id = $1`,
         [threadId]
       );
       const t = trows[0];
@@ -218,11 +263,23 @@ export default function chatRouterFactory(io) {
         return res.status(403).json({ message: 'Brak uprawnień' });
       }
 
-      await pool.query(`DELETE FROM chats.threads WHERE id = $1`, [threadId]); // CASCADE usuwa wiadomości
+      if (me === t.owner_email) {
+        await pool.query(`UPDATE chats.threads SET deleted_for_owner = true WHERE id = $1`, [threadId]);
+      } else {
+        await pool.query(`UPDATE chats.threads SET deleted_for_partner = true WHERE id = $1`, [threadId]);
+      }
 
-      // sygnał dla drugiej strony (opcjonalne odświeżenie listy)
-      io.to(`user:${t.owner_email}`).emit('chat:notify', { threadId, deleted: true });
-      io.to(`user:${t.partner_email}`).emit('chat:notify', { threadId, deleted: true });
+      // jeżeli obie strony ukryły – posprzątaj fizycznie (opcjonalnie)
+      const { rows: chk } = await pool.query(
+        `SELECT deleted_for_owner, deleted_for_partner FROM chats.threads WHERE id = $1`,
+        [threadId]
+      );
+      if (chk[0]?.deleted_for_owner && chk[0]?.deleted_for_partner) {
+        await pool.query(`DELETE FROM chats.threads WHERE id = $1`, [threadId]);
+      }
+
+      // Powiadom TYLKO usuwającego (druga osoba nie dostaje "deleted")
+      io.to(`user:${me}`).emit('chat:notify', { threadId, deleted: true });
 
       res.json({ ok: true });
     } catch (e) {
