@@ -57,7 +57,7 @@ export const fetchPetProfile = async (req, res) => {
             return res.status(404).json({ message: 'No pet profiles found for this user' });
         }
 
-        res.status(200).json(rows);
+        res.json(rows);
     } catch (error) {
         console.error('FETCH PET PROFILE ERROR:', error.message);
         res.status(500).send();
