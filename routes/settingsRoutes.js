@@ -8,6 +8,7 @@ import {
   deleteUser,
   updatePassword,
 } from '../controllers/settingsController.js';
+import { createPetProfile, fetchPetProfiles, deletePetProfile } from '../controllers/petProfileController.js';
 
 const router = express.Router();
 
@@ -17,5 +18,8 @@ router.put('/notifications', authenticateToken, updateNotifications);
 router.get('/fetch-user-settings', authenticateToken, fetchUserSettings);
 router.delete('/delete-user', authenticateToken, deleteUser);
 router.put('/update-password', authenticateToken, updatePassword);
+router.post('/createPetProfile', authenticateToken, createPetProfile);
+router.get('/fetchPetProfiles', authenticateToken, fetchPetProfiles);
+router.delete('/deletePetProfile', authenticateToken, deletePetProfile);
 
 export default router;
