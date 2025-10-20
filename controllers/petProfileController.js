@@ -16,7 +16,7 @@ export const createPetProfile = async (req, res) => {
     if (req.files && req.files.length > 0) {
         const results = await Promise.all(
             req.files.map((file) =>
-                cloudinary.uploader.upload(file.path, { folder: 'lost_pets_photos' })
+                cloudinary.uploader.upload(file.path, { folder: 'pet_profiles_photos' })
             )
         );
         photo_urls = results.map((r) => r.secure_url);
