@@ -3,7 +3,7 @@ import cloudinary from '../cloudinary.js';
 
 export const createPetProfile = async (req, res) => {
   try {
-    const user = req.user;
+    const { user } = req.user;
     const { petId, petName, petAge, petSize, petSpecies, petBreed, petColor } = req.body;
 
     const existingPetProfiles = await fetchPetProfile(req, res);
