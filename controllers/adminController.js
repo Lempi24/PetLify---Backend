@@ -49,12 +49,12 @@ export const rejectReport = async (req, res) => {
   try {
     if (reportType === 'lost') {
       await pool.query(
-        `UPDATE reports.lost_reports SET status = 'closed' WHERE id = $1`,
+        `UPDATE reports.lost_reports SET status = 'rejected' WHERE id = $1`,
         [reportId]
       );
     } else if (reportType === 'found') {
       await pool.query(
-        `UPDATE reports.found_reports SET status = 'closed' WHERE id = $1`,
+        `UPDATE reports.found_reports SET status = 'rejected' WHERE id = $1`,
         [reportId]
       );
     } else {
