@@ -22,7 +22,7 @@ export const createPetProfile = async (req, res) => {
         photo_urls = results.map((r) => r.secure_url);
         req.files.forEach((f) => fs.unlinkSync(f.path));
     } else {
-        return res.status(400).send('Brak wymaganego zdjęcia');
+        return res.status(400).send('No photo uploaded');
     }
     
     await pool.query(
