@@ -6,10 +6,10 @@ export const createPetProfile = async (req, res) => {
     const user = req.user;
     const { petId, petName, petAge, petSize, petSpecies, petBreed, petColor } = req.body;
 
-    const existingPetProfile = await fetchPetProfile(req, res);
+    const existingPetProfiles = await fetchPetProfile(req, res);
 
-    if (existingPetProfile) {
-      return res.status(400).json({ message: 'Pet profile already exists for this user' });
+    if (existingPetProfiles && existingPetProfiles.length > 2) {
+      return res.status(400).json({ message: 'User has reached the maximum number of pet profiles' });
     }
 
     let photo_urls = [];
