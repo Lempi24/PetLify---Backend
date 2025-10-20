@@ -155,20 +155,20 @@ export const fetchUserReports = async (req, res) => {
 		if (!email) return res.status(401).json({ error: 'Unauthorized' });
 
 		const lostSql = `
-      SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
-             lost_date, city, street, owner, photo_url, description, phone
-      FROM reports.lost_reports
-      WHERE owner = $1
-      ORDER BY lost_date DESC
-    `;
+			SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
+					lost_date, city, street, owner, photo_url, description, phone
+			FROM reports.lost_reports
+			WHERE owner = $1
+			ORDER BY lost_date DESC
+		`;
 
 		const foundSql = `
-      SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
-             found_date, city, street, owner, photo_url, description, phone
-      FROM reports.found_reports
-      WHERE owner = $1
-      ORDER BY found_date DESC
-    `;
+			SELECT id, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
+					found_date, city, street, owner, photo_url, description, phone
+			FROM reports.found_reports
+			WHERE owner = $1
+			ORDER BY found_date DESC
+			`;
 
 		const [lostResult, foundResult] = await Promise.all([
 			pool.query(lostSql, [email]),
