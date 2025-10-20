@@ -1,5 +1,6 @@
 import pool from '../database.js';
 import cloudinary from '../cloudinary.js';
+import fs from 'fs';
 
 export const createPetProfile = async (req, res) => {
   try {
@@ -13,6 +14,11 @@ export const createPetProfile = async (req, res) => {
     }
 
     let photo_urls = [];
+
+    if (req.files.length > 5) {
+        return res.status(400).json({ message: 'You can upload up to 5 photos only' });
+    }
+
     if (req.files && req.files.length > 0) {
         const results = await Promise.all(
             req.files.map((file) =>
@@ -46,6 +52,11 @@ export const fetchPetProfile = async (req, res) => {
             `SELECT * FROM pets_info.pet_profiles WHERE owner = $1`,
             [user.email]
         );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'No pet profiles found for this user' });
+        }
+
         res.status(200).json(rows);
     } catch (error) {
         console.error('FETCH PET PROFILE ERROR:', error.message);
