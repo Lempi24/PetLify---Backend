@@ -2,7 +2,6 @@ import fs from 'fs';
 import pool from '../database.js';
 import cloudinary from '../cloudinary.js';
 
-// --- Create Lost Report ---
 export const createLostForm = async (req, res) => {
 	try {
 		const user = req.user;
@@ -20,7 +19,6 @@ export const createLostForm = async (req, res) => {
 			description,
 		} = req.body;
 
-		// Limit 3 aktywnych zgłoszeń
 		const { rows } = await pool.query(
 			'SELECT COUNT(*) FROM reports.lost_reports WHERE owner = $1',
 			[user.email]
@@ -28,7 +26,6 @@ export const createLostForm = async (req, res) => {
 		if (parseInt(rows[0].count) >= 3)
 			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
 
-		// Upload zdjęć do Cloudinary
 		let photo_urls = [];
 		if (req.files && req.files.length > 0) {
 			const results = await Promise.all(
@@ -76,7 +73,6 @@ export const createLostForm = async (req, res) => {
 	}
 };
 
-// --- Create Found Report ---
 export const createFoundForm = async (req, res) => {
 	try {
 		const user = req.user;
@@ -148,7 +144,6 @@ export const createFoundForm = async (req, res) => {
 	}
 };
 
-// --- Fetch user reports ---
 export const fetchUserReports = async (req, res) => {
 	try {
 		const email = req.user?.email;
