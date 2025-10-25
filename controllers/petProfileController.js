@@ -115,7 +115,6 @@ export const updatePetProfile = async (req, res) => {
             return res.status(400).json({ message: 'Brak ID profilu zwierzęcia' });
         }
 
-        // Sprawdź czy profil należy do użytkownika
         const existingProfile = await pool.query(
             `SELECT * FROM pets_info.pet_profiles WHERE id = $1 AND owner = $2`,
             [petId, user.email]
@@ -128,7 +127,6 @@ export const updatePetProfile = async (req, res) => {
 
         let photo_urls = [];
         
-        // Przetwarzanie istniejących zdjęć
         if (existingPhotos) {
             if (Array.isArray(existingPhotos)) {
                 photo_urls = existingPhotos;
@@ -138,7 +136,6 @@ export const updatePetProfile = async (req, res) => {
             console.log('Existing photos:', photo_urls);
         }
 
-        // Przetwarzanie nowych zdjęć jeśli są
         if (req.files && req.files.length > 0) {
             console.log('Processing new files:', req.files.length);
             
@@ -158,14 +155,12 @@ export const updatePetProfile = async (req, res) => {
             req.files.forEach((f) => fs.unlinkSync(f.path));
         }
 
-        // Ogranicz do maksymalnie 5 zdjęć
         if (photo_urls.length > 5) {
             photo_urls = photo_urls.slice(0, 5);
         }
 
         console.log('Final photo URLs:', photo_urls);
 
-        // Aktualizuj profil w bazie danych - użyj CURRENT_TIMESTAMP zamiast updated_at
         const updateQuery = `
             UPDATE pets_info.pet_profiles 
             SET pet_name = $1, pet_age = $2, pet_size = $3, pet_species_type = $4, 
