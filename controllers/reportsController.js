@@ -1,7 +1,7 @@
 import fs from 'fs';
 import pool from '../database.js';
 import cloudinary from '../cloudinary.js';
-
+import axios from 'axios';
 export const createLostForm = async (req, res) => {
 	try {
 		const user = req.user;
@@ -17,8 +17,20 @@ export const createLostForm = async (req, res) => {
 			lostStreet,
 			lostCoordinates,
 			description,
+			recaptchaToken,
 		} = req.body;
+		if (!recaptchaToken) {
+			return res.status(400).json({ message: 'Brak tokenu CAPTCHA' });
+		}
+		const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
+		const captchaRes = await axios.post(verificationUrl);
+		const captchaData = captchaRes.data;
 
+		if (!captchaData.success || captchaData.score < 0.5) {
+			return res
+				.status(400)
+				.json({ message: 'Nie udało się zweryfikować CAPTCHA' });
+		}
 		const { rows } = await pool.query(
 			'SELECT COUNT(*) FROM reports.lost_reports WHERE owner = $1',
 			[user.email]
@@ -88,8 +100,20 @@ export const createFoundForm = async (req, res) => {
 			foundStreet,
 			foundCoordinates,
 			description,
+			recaptchaToken,
 		} = req.body;
+		if (!recaptchaToken) {
+			return res.status(400).json({ message: 'Brak tokenu CAPTCHA' });
+		}
+		const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
+		const captchaRes = await axios.post(verificationUrl);
+		const captchaData = captchaRes.data;
 
+		if (!captchaData.success || captchaData.score < 0.5) {
+			return res
+				.status(400)
+				.json({ message: 'Nie udało się zweryfikować CAPTCHA' });
+		}
 		const { rows } = await pool.query(
 			'SELECT COUNT(*) FROM reports.found_reports WHERE owner = $1',
 			[user.email]
