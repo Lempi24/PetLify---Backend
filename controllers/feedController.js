@@ -3,14 +3,15 @@ import pool from '../database.js';
 export const fetchPets = async (req, res) => {
   try {
     const {
-      type,        
-      status,     
-      species,    
-      breed,       
-      cityStreet,   
-      ageFrom,     
-      ageTo,       
-      sort,        
+      type,        // 'lost' | 'found' (wymagane)
+      status,      // np. 'active'
+      species,     // kod systemowy (dog/cat/...)
+      breed,       // opcjonalne (fragment, ILIKE)
+      cityStreet,  // "Miasto, Ulica" -> AND; jeden token -> OR
+      ageFrom,     // liczba >= 1
+      ageTo,       // liczba >= 1
+      ageUnit,     // 'years' | 'months'
+      sort,        // newest|oldest|age_desc|age_asc
     } = req.query;
 
     const tableMap = { lost: 'reports.lost_reports', found: 'reports.found_reports' };
@@ -26,18 +27,21 @@ export const fetchPets = async (req, res) => {
       params.push(status);
       where.push(`pets.status = $${params.length}`);
     }
+
     if (species) {
       params.push(species);
       where.push(`pets.pet_species = $${params.length}`);
     }
+
     if (breed) {
       params.push(`%${breed}%`);
       where.push(`pets.pet_breed ILIKE $${params.length}`);
     }
 
-    // LOKALIZACJA: "Miasto, Ulica" => AND; jeden token => OR
+    // LOKALIZACJA
     if (cityStreet && cityStreet.trim() !== '') {
       const parts = cityStreet.split(',').map(s => s.trim()).filter(Boolean);
+
       if (parts.length >= 2) {
         params.push(`%${parts[0]}%`);
         const pCity = `$${params.length}`;
@@ -51,8 +55,8 @@ export const fetchPets = async (req, res) => {
       }
     }
 
-    // WIEK => wyciągamy pierwszą liczbę (obsługa 0,5 / 1-3 itp.)
-    const ageExpr = `
+    // ---- WIEK: ujednolicenie do miesięcy ----
+    const ageNumExpr = `
       CAST(
         REPLACE(
           substring(pets.pet_age from '([0-9]+(?:[.,][0-9]+)?)'),
@@ -61,27 +65,52 @@ export const fetchPets = async (req, res) => {
       )
     `;
 
-    // Przyjmujemy tylko całkowite >= 1 z query
+    const ageInMonthsExpr = `
+      CASE
+        WHEN pets.pet_age ILIKE '%mies%' OR pets.pet_age ILIKE '%msc%' THEN ${ageNumExpr}
+        ELSE (${ageNumExpr}) * 12
+      END
+    `;
+
     const parseIntOrNull = (v) => {
       if (v === undefined || v === null || v === '') return null;
       const n = Number(v);
       return Number.isInteger(n) && n >= 1 ? n : null;
     };
 
+    const unit = (ageUnit || 'years').toLowerCase() === 'months' ? 'months' : 'years';
     const aFrom = parseIntOrNull(ageFrom);
-    const aTo   = parseIntOrNull(ageTo);
+    const aTo = parseIntOrNull(ageTo);
 
-    if (aFrom !== null) { params.push(aFrom); where.push(`(${ageExpr}) >= $${params.length}`); }
-    if (aTo   !== null) { params.push(aTo);   where.push(`(${ageExpr}) <= $${params.length}`); }
+    const toMonths = (val) => (val === null ? null : (unit === 'months' ? val : val * 12));
+
+    const aFromMonths = toMonths(aFrom);
+    const aToMonths = toMonths(aTo);
+
+    if (aFromMonths !== null) {
+      params.push(aFromMonths);
+      where.push(`(${ageInMonthsExpr}) >= $${params.length}`);
+    }
+    if (aToMonths !== null) {
+      params.push(aToMonths);
+      where.push(`(${ageInMonthsExpr}) <= $${params.length}`);
+    }
 
     // SORTOWANIE
     let orderBy = `pets.${dateCol} DESC`;
     switch ((sort || '').toLowerCase()) {
-      case 'oldest':   orderBy = `pets.${dateCol} ASC`; break;
-      case 'age_desc': orderBy = `(${ageExpr}) DESC NULLS LAST`; break;
-      case 'age_asc':  orderBy = `(${ageExpr}) ASC NULLS FIRST`; break;
+      case 'oldest':
+        orderBy = `pets.${dateCol} ASC`;
+        break;
+      case 'age_desc':
+        orderBy = `(${ageInMonthsExpr}) DESC NULLS LAST`;
+        break;
+      case 'age_asc':
+        orderBy = `(${ageInMonthsExpr}) ASC NULLS FIRST`;
+        break;
       case 'newest':
-      default:         orderBy = `pets.${dateCol} DESC`;
+      default:
+        orderBy = `pets.${dateCol} DESC`;
     }
 
     const sql = `
