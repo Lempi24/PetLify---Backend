@@ -5,13 +5,15 @@ export const fetchPets = async (req, res) => {
     const {
       type,        // 'lost' | 'found' (wymagane)
       status,      // np. 'active'
-      species,     // kod systemowy (dog/cat/...)
-      breed,       // opcjonalne (fragment, ILIKE)
-      cityStreet,  // "Miasto, Ulica" -> AND; jeden token -> OR
-      ageFrom,     // liczba >= 1
-      ageTo,       // liczba >= 1
-      ageUnit,     // 'years' | 'months'
+      species,     // kod systemowy: 'dog' | 'cat' | ...
+      breed,       // fragment (ILIKE)
+      cityStreet,  // np. "Poznań, Zwierzyniecka"
+      ageFrom,     // int >= 1
+      ageTo,       // int >= 1
+      ageUnit,     // 'years' | 'months' (domyślnie 'years')
       sort,        // newest|oldest|age_desc|age_asc
+      page,        // numer strony (1..)
+      limit,       // ile na stronę
     } = req.query;
 
     const tableMap = { lost: 'reports.lost_reports', found: 'reports.found_reports' };
@@ -20,6 +22,7 @@ export const fetchPets = async (req, res) => {
 
     const dateCol = type === 'lost' ? 'lost_date' : 'found_date';
 
+    // ---------- Budowanie filtrów (wspólne dla zapytań COUNT i SELECT) ----------
     const where = [];
     const params = [];
 
@@ -38,7 +41,7 @@ export const fetchPets = async (req, res) => {
       where.push(`pets.pet_breed ILIKE $${params.length}`);
     }
 
-    // LOKALIZACJA
+    // LOKALIZACJA: "Miasto, Ulica" => AND; jeden token => OR
     if (cityStreet && cityStreet.trim() !== '') {
       const parts = cityStreet.split(',').map(s => s.trim()).filter(Boolean);
 
@@ -67,7 +70,8 @@ export const fetchPets = async (req, res) => {
 
     const ageInMonthsExpr = `
       CASE
-        WHEN pets.pet_age ILIKE '%mies%' OR pets.pet_age ILIKE '%msc%' THEN ${ageNumExpr}
+        WHEN pets.pet_age ILIKE '%mies%' OR pets.pet_age ILIKE '%msc%'
+          THEN ${ageNumExpr}
         ELSE (${ageNumExpr}) * 12
       END
     `;
@@ -83,7 +87,6 @@ export const fetchPets = async (req, res) => {
     const aTo = parseIntOrNull(ageTo);
 
     const toMonths = (val) => (val === null ? null : (unit === 'months' ? val : val * 12));
-
     const aFromMonths = toMonths(aFrom);
     const aToMonths = toMonths(aTo);
 
@@ -113,18 +116,43 @@ export const fetchPets = async (req, res) => {
         orderBy = `pets.${dateCol} DESC`;
     }
 
-    const sql = `
+    // PAGINACJA (domyślnie 3 na stronę, max 50)
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const pageSize = Math.max(1, Math.min(50, parseInt(limit, 10) || 3));
+    const offset = (pageNum - 1) * pageSize;
+
+    // ---------- COUNT (ile rekordów spełnia warunki) ----------
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM ${tableName} AS pets
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    `;
+    const { rows: countRows } = await pool.query(countSql, params);
+    const total = countRows?.[0]?.total ?? 0;
+
+    // ---------- Właściwe SELECT z limitem ----------
+    const itemsSql = `
       SELECT pets.*, users.phone, pets.id
       FROM ${tableName} AS pets
       JOIN users_data.users AS users
         ON pets.owner = users.email
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY ${orderBy}
-      LIMIT 200
+      LIMIT $${params.length + 1}
+      OFFSET $${params.length + 2}
     `;
+    const itemsParams = [...params, pageSize, offset];
+    const { rows: items } = await pool.query(itemsSql, itemsParams);
 
-    const { rows } = await pool.query(sql, params);
-    res.status(200).json(rows);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    res.status(200).json({
+      items,
+      total,
+      page: pageNum,
+      pageSize,
+      totalPages,
+    });
   } catch (error) {
     console.error('FETCH PETS ERROR:', error.message, error.code);
     res.status(500).json({ error: 'Database error' });
