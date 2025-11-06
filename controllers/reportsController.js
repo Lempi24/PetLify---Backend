@@ -2,10 +2,17 @@ import fs from 'fs';
 import pool from '../database.js';
 import cloudinary from '../cloudinary.js';
 import axios from 'axios';
+
 export const createLostForm = async (req, res) => {
 	try {
 		const user = req.user;
+
+		if (!user || !user.email) {
+			return res.status(401).send('Nieautoryzowany dostęp');
+		}
+
 		const {
+			petId,
 			petSpecies,
 			petBreed,
 			petColor,
@@ -19,9 +26,11 @@ export const createLostForm = async (req, res) => {
 			description,
 			recaptchaToken,
 		} = req.body;
+
 		if (!recaptchaToken) {
 			return res.status(400).json({ message: 'Brak tokenu CAPTCHA' });
 		}
+
 		const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
 		const captchaRes = await axios.post(verificationUrl);
 		const captchaData = captchaRes.data;
@@ -55,12 +64,12 @@ export const createLostForm = async (req, res) => {
 
 		await pool.query(
 			`INSERT INTO reports.lost_reports 
-       (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, 
-        lost_date, city, street, coordinates, description, photo_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,POINT($12,$13),$14,$15)`,
+			(owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, 
+				lost_date, city, street, coordinates, description, photo_url)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,POINT($12,$13),$14,$15)`,
 			[
 				user.email,
-				user.phone,
+				user.phone || null,
 				petSpecies,
 				petBreed,
 				petColor,
@@ -72,10 +81,21 @@ export const createLostForm = async (req, res) => {
 				lostStreet,
 				lng,
 				lat,
-				description,
+				description || '',
 				photo_urls,
 			]
 		);
+
+		if (petId) {
+			try {
+				await pool.query(
+					'UPDATE pets_info.pet_profiles SET is_lost = TRUE WHERE id = $1 AND owner = $2',
+					[petId, user.email]
+				);
+			} catch (err) {
+				console.error('UPDATE PET PROFILE ERROR:', err.message);
+			}
+		}
 
 		res.status(200).send({ message: 'Zgłoszenie dodane' });
 	} catch (err) {
@@ -138,9 +158,9 @@ export const createFoundForm = async (req, res) => {
 
 		await pool.query(
 			`INSERT INTO reports.found_reports 
-       (owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
-        found_date, city, street, coordinates, description, photo_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,POINT($12,$13),$14,$15)`,
+			(owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size,
+			found_date, city, street, coordinates, description, photo_url)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,POINT($12,$13),$14,$15)`,
 			[
 				user.email,
 				user.phone,

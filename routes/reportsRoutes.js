@@ -9,15 +9,14 @@ import {
 } from '../controllers/reportsController.js';
 
 const router = express.Router();
-const photoUpload = multer({ dest: './uploads' });
-
-// Lost report
-router.post(
-	'/create-lost-form',
-	authenticateToken,
-	photoUpload.array('photos', 5),
-	createLostForm
-);
+const photoUpload = multer({ 
+    dest: './uploads',
+    fileFilter: (req, file, cb) => {
+        console.log('Multer processing file:', file.originalname);
+        console.log('Auth header after multer:', req.headers.authorization);
+        cb(null, true);
+    }
+});
 
 // Found report
 router.post(
@@ -25,6 +24,14 @@ router.post(
 	authenticateToken,
 	photoUpload.array('photos', 5),
 	createFoundForm
+);
+
+// Lost report
+router.post(
+	'/create-lost-form',
+	authenticateToken,
+	photoUpload.array('photos', 5),
+	createLostForm
 );
 
 // User reports
