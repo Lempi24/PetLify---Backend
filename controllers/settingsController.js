@@ -1,7 +1,6 @@
 import bcrypt from 'bcrypt';
 import pool from '../database.js';
 
-// --- Update user info ---
 export const updateUserInfo = async (req, res) => {
 	try {
 		const { email, name, surname, phoneNumber } = req.body;
@@ -16,7 +15,6 @@ export const updateUserInfo = async (req, res) => {
 	}
 };
 
-// --- Update location ---
 export const updateLocation = async (req, res) => {
 	try {
 		const { email, city, country, latitude, longitude } = req.body;
@@ -37,7 +35,6 @@ export const updateLocation = async (req, res) => {
 	}
 };
 
-// --- Update notification settings ---
 export const updateNotifications = async (req, res) => {
 	try {
 		const { notify_new_chats, notify_missing, email } = req.body;
@@ -54,7 +51,6 @@ export const updateNotifications = async (req, res) => {
 	}
 };
 
-// --- Fetch user settings ---
 export const fetchUserSettings = async (req, res) => {
 	try {
 		const email = req.user.email;
@@ -69,7 +65,6 @@ export const fetchUserSettings = async (req, res) => {
 	}
 };
 
-// --- Delete user ---
 export const deleteUser = async (req, res) => {
 	try {
 		const { email } = req.body;
@@ -85,7 +80,6 @@ export const deleteUser = async (req, res) => {
 	}
 };
 
-// --- Update password ---
 export const updatePassword = async (req, res) => {
 	try {
 		const { email, currentPassword, newPassword } = req.body;

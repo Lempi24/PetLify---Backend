@@ -20,8 +20,8 @@ export const createPetProfile = async (req, res) => {
         }
 
         const existingPetProfiles = await getUserPetProfiles(user.email);
-        if (existingPetProfiles.length >= 3) {
-            return res.status(400).json({ message: 'Limit 3 profili zwierząt został osiągnięty' });
+        if (existingPetProfiles.length >= 8) {
+            return res.status(400).json({ message: 'Limit 8 profili zwierząt został osiągnięty' });
         }
 
         let photo_urls = [];

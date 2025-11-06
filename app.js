@@ -18,6 +18,8 @@ import settingsRoutes from './routes/settingsRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import feedRoutes from './routes/feedRoutes.js';
+import petProfilesRoutes from './routes/petProfilesRoutes.js';
+
 const app = express();
 const server = http.createServer(app);
 
@@ -129,6 +131,8 @@ app.use('/reports', reportsRoutes);
 app.use('/admin-panel', adminRoutes);
 //feed na stronie głównej
 app.use('/main-page', feedRoutes);
+
+app.use('/pet-profiles', petProfilesRoutes);
 
 // ====== ROUTES: CHATS (NOWE) ======
 app.use('/chats', chatRouterFactory(io));
