@@ -44,6 +44,7 @@ export const createLostForm = async (req, res) => {
 			'SELECT COUNT(*) FROM reports.lost_reports WHERE owner = $1',
 			[user.email]
 		);
+		
 		if (parseInt(rows[0].count) >= 3)
 			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
 
