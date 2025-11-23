@@ -44,7 +44,7 @@ export const createLostForm = async (req, res) => {
 			'SELECT COUNT(*) FROM reports.lost_reports WHERE owner = $1',
 			[user.email]
 		);
-		
+
 		if (parseInt(rows[0].count) >= 3)
 			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
 
@@ -237,6 +237,7 @@ export const editReport = async (req, res) => {
 			city,
 			photo_url,
 			type,
+			status,
 		} = req.body;
 		const owner = req.user.email;
 
@@ -257,8 +258,9 @@ export const editReport = async (req, res) => {
 				description = $5,
 				street = $6,
 				city = $7,
-				photo_url = $8
-			WHERE id = $9 AND owner = $10
+				photo_url = $8,
+				status = $9
+			WHERE id = $10 AND owner = $11
 			RETURNING *;
 		`;
 
@@ -271,6 +273,7 @@ export const editReport = async (req, res) => {
 			street,
 			city,
 			photo_url,
+			status,
 			id,
 			owner,
 		]);

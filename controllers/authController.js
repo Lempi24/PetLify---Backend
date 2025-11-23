@@ -9,10 +9,20 @@ dotenv.config();
 
 export const getMe = async (req, res) => {
 	try {
-		const data = await pool.query(
-			'SELECT * FROM users_data.users WHERE email = $1',
-			[req.headers.useremail]
-		);
+		const query = `
+      SELECT u.*, s.default_location_lat, s.default_location_lng
+      FROM users_data.users u
+      LEFT JOIN users_data.settings s
+        ON u.email = s.email
+      WHERE u.email = $1
+    `;
+
+		const data = await pool.query(query, [req.headers.useremail]);
+
+		if (data.rows.length === 0) {
+			return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+		}
+
 		res.status(200).json(data.rows[0]);
 	} catch (error) {
 		console.error('FETCH USER DATA ERROR:', error.message);
