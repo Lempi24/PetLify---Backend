@@ -36,17 +36,43 @@ export const createLostForm = async (req, res) => {
 		const captchaData = captchaRes.data;
 
 		if (!captchaData.success || captchaData.score < 0.5) {
-			return res
-				.status(400)
-				.json({ message: 'Nie udało się zweryfikować CAPTCHA' });
+			return res.status(400).json({ message: 'Nie udało się zweryfikować CAPTCHA' });
 		}
+
 		const { rows } = await pool.query(
 			'SELECT COUNT(*) FROM reports.lost_reports WHERE owner = $1',
 			[user.email]
 		);
-
 		if (parseInt(rows[0].count) >= 3)
 			return res.status(401).send('Limit 3 zgłoszeń osiągnięty');
+
+		const duplicateQuery = `
+			SELECT 1
+			FROM reports.lost_reports
+			WHERE owner = $1
+			AND LOWER(pet_species::text) = LOWER($2)
+			AND LOWER(pet_breed::text) = LOWER($3)
+			AND LOWER(pet_color::text) = LOWER($4)
+			AND LOWER(pet_name::text) = LOWER($5)
+			AND pet_age = $6
+			AND pet_size = $7
+			LIMIT 1;
+		`;
+
+		const duplicateParams = [
+			user.email,
+			petSpecies || '',
+			petBreed || '',
+			petColor || '',
+			petName || '',
+			petAge,
+			petSize,
+		];
+
+		const duplicateResult = await pool.query(duplicateQuery, duplicateParams);
+		if (duplicateResult.rowCount > 0) {
+			return res.status(400).json({ message: 'Takie zgłoszenie już istnieje' });
+		}
 
 		let photo_urls = [];
 		if (req.files && req.files.length > 0) {
@@ -66,7 +92,7 @@ export const createLostForm = async (req, res) => {
 		await pool.query(
 			`INSERT INTO reports.lost_reports 
 			(owner, phone, pet_species, pet_breed, pet_color, pet_name, pet_age, pet_size, 
-				lost_date, city, street, coordinates, description, photo_url)
+			 lost_date, city, street, coordinates, description, photo_url)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,POINT($12,$13),$14,$15)`,
 			[
 				user.email,
