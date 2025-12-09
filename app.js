@@ -11,6 +11,8 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from './database.js';
 import cloudinary from './cloudinary.js';
 import authenticateToken from './tokenAuthorization.js';
+import './jobsDB.js';
+
 //Routy
 import chatRouterFactory from './routes/chats.js';
 import authRoutes from './routes/authRoutes.js';

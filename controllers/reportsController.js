@@ -224,6 +224,7 @@ export const fetchUserReports = async (req, res) => {
 			SELECT *
 			FROM reports.lost_reports
 			WHERE owner = $1
+			AND status != 'expired'
 			ORDER BY lost_date DESC
 		`;
 
@@ -231,6 +232,7 @@ export const fetchUserReports = async (req, res) => {
 			SELECT *
 			FROM reports.found_reports
 			WHERE owner = $1
+			AND status != 'expired'
 			ORDER BY found_date DESC
 		`;
 
@@ -313,6 +315,47 @@ export const editReport = async (req, res) => {
 		res.json(result.rows[0]);
 	} catch (error) {
 		console.error('Błąd edycji raportu:', error);
+		res.status(500).json({ message: 'Błąd serwera.' });
+	}
+};
+
+export const updateReportStatus = async (req, res) => {
+	try {
+		const { id } = req.params;
+		const { status } = req.body;
+		const owner = req.user.email;
+
+		if (!['expired', 'active', 'pending', 'rejected', 'closed'].includes(status)) {
+			return res.status(400).json({ message: 'Nieprawidłowy status.' });
+		}
+
+		const lostQuery = await pool.query(
+			`UPDATE reports.lost_reports
+			 SET status = $1
+			 WHERE id = $2 AND owner = $3
+			 RETURNING *`,
+			[status, id, owner]
+		);
+
+		if (lostQuery.rowCount > 0) {
+			return res.json({ message: 'Status zaktualizowany.', report: lostQuery.rows[0] });
+		}
+
+		const foundQuery = await pool.query(
+			`UPDATE reports.found_reports
+			 SET status = $1
+			 WHERE id = $2 AND owner = $3
+			 RETURNING *`,
+			[status, id, owner]
+		);
+
+		if (foundQuery.rowCount > 0) {
+			return res.json({ message: 'Status zaktualizowany.', report: foundQuery.rows[0] });
+		}
+
+		return res.status(404).json({ message: 'Raport nie istnieje lub brak uprawnień.' });
+	} catch (err) {
+		console.error('UPDATE STATUS ERROR:', err);
 		res.status(500).json({ message: 'Błąd serwera.' });
 	}
 };

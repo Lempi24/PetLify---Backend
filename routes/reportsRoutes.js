@@ -6,6 +6,7 @@ import {
 	createFoundForm,
 	fetchUserReports,
 	editReport,
+	updateReportStatus
 } from '../controllers/reportsController.js';
 
 const router = express.Router();
@@ -35,7 +36,24 @@ router.post(
 );
 
 // User reports
-router.get('/fetch-reports', authenticateToken, fetchUserReports);
+router.get(
+	'/fetch-reports', 
+	authenticateToken, 
+	fetchUserReports
+);
+
 //Edit report
-router.put('/edit-report', authenticateToken, editReport);
+router.put(
+	'/edit-report',
+	 authenticateToken,
+	  editReport
+);
+
+// Update report status (expired / active itp.)
+router.patch(
+	'/update-status/:id',
+	authenticateToken,
+	updateReportStatus
+);
+
 export default router;
