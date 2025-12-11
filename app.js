@@ -33,17 +33,11 @@ const allowedOrigins = [
 ];
 app.use(
 	cors({
-		origin: (origin, callback) => {
-			if (!origin || allowedOrigins.some((pattern) => pattern.test(origin))) {
-				callback(null, true);
-			} else {
-				callback(new Error('Not allowed by CORS'));
-			}
-		},
-		methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+		origin: process.env.CORS_ORIGIN,
 		credentials: true,
 	})
 );
+
 app.use(express.json());
 
 // --- Socket.IO (JWT autoryzacja) ---
