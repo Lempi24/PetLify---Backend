@@ -24,13 +24,38 @@ const app = express();
 const server = http.createServer(app);
 
 // --- CORS ---
-const FRONT_ORIGIN = process.env.FRONT_ORIGIN || 'http://localhost:5173';
-app.use(cors({ origin: FRONT_ORIGIN, credentials: true }));
+const allowedOrigins = [
+	/^http(s)?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/, // Łączy obie reguły i dodaje HTTPS
+	/^https:\/\/twoja-domena\.pl$/,
+	process.env.CORS_ORIGIN,
+];
+app.use(
+	cors({
+		origin: (origin, callback) => {
+			if (!origin || allowedOrigins.some((pattern) => pattern.test(origin))) {
+				callback(null, true);
+			} else {
+				callback(new Error('Not allowed by CORS'));
+			}
+		},
+		methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+		credentials: true,
+	})
+);
 app.use(express.json());
 
 // --- Socket.IO (JWT autoryzacja) ---
 const io = new SocketIOServer(server, {
-	cors: { origin: FRONT_ORIGIN, methods: ['GET', 'POST'] },
+	cors: {
+		origin: (origin, callback) => {
+			if (!origin || allowedOrigins.some((pattern) => pattern.test(origin))) {
+				callback(null, true);
+			} else {
+				callback(new Error('Not allowed by CORS'));
+			}
+		},
+		methods: ['GET', 'POST'],
+	},
 });
 
 io.use((socket, next) => {
