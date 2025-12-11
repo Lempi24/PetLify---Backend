@@ -27,10 +27,11 @@ const server = http.createServer(app);
 
 // --- CORS ---
 const allowedOrigins = [
-	/^http(s)?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/, // Łączy obie reguły i dodaje HTTPS
+	/^http(s)?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
 	/^https:\/\/twoja-domena\.pl$/,
 	process.env.CORS_ORIGIN,
 ];
+
 app.use(
 	cors({
 		origin: process.env.CORS_ORIGIN,
@@ -44,7 +45,18 @@ app.use(express.json());
 const io = new SocketIOServer(server, {
 	cors: {
 		origin: (origin, callback) => {
-			if (!origin || allowedOrigins.some((pattern) => pattern.test(origin))) {
+			const isAllowed = allowedOrigins.some((pattern) => {
+				if (pattern instanceof RegExp) {
+					return pattern.test(origin);
+				}
+
+				if (typeof pattern === 'string') {
+					return pattern === origin;
+				}
+				return false;
+			});
+
+			if (!origin || isAllowed) {
 				callback(null, true);
 			} else {
 				callback(new Error('Not allowed by CORS'));
