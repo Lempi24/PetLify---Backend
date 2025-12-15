@@ -33,20 +33,20 @@ export const getMe = async (req, res) => {
 export const register = async (req, res) => {
 	try {
 		const { email, password, recaptchaToken } = req.body;
-		if (!recaptchaToken) {
-			return res.status(400).json({ message: 'Brak tokenu CAPTCHA' });
-		}
-		if (!email || !password)
-			return res.status(400).send({ message: 'No email or password found' });
-		const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
-		const captchaRes = await axios.post(verificationUrl);
-		const captchaData = captchaRes.data;
+		// if (!recaptchaToken) {
+		// 	return res.status(400).json({ message: 'Brak tokenu CAPTCHA' });
+		// }
+		// if (!email || !password)
+		// 	return res.status(400).send({ message: 'No email or password found' });
+		// const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
+		// const captchaRes = await axios.post(verificationUrl);
+		// const captchaData = captchaRes.data;
 
-		if (!captchaData.success || captchaData.score < 0.5) {
-			return res
-				.status(400)
-				.json({ message: 'Nie udało się zweryfikować CAPTCHA' });
-		}
+		// if (!captchaData.success || captchaData.score < 0.5) {
+		// 	return res
+		// 		.status(400)
+		// 		.json({ message: 'Nie udało się zweryfikować CAPTCHA' });
+		// }
 		const existingUser = await pool.query(
 			'SELECT email FROM users_data.logins WHERE email = $1',
 			[email]
